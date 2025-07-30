@@ -1,539 +1,541 @@
-<?php 
+<?php
 session_start();
 include('koneksi.php');
 
-//Bobot
-$W1	= $_POST['harga'];
-$W2	= $_POST['ram'];
-$W3	= $_POST['memori'];
-$W4	= $_POST['processor'];
-$W5	= $_POST['kamera'];
+$W1 = 0; // Harga
+$W2 = 0; // Processor
+$W3 = 0; // RAM
+$W4 = 0; // VGA
+$W5 = 0; // Memori
+$W6 = 0; // LCD
 
-//Pembagi Normalisasi
-function pembagiNM($matrik){
-	for($i=0;$i<5;$i++){
-		$pangkatdua[$i] = 0;
-		for($j=0;$j<sizeof($matrik);$j++){
-			$pangkatdua[$i] = $pangkatdua[$i] + pow($matrik[$j][$i],2);}
-		$pembagi[$i] = sqrt($pangkatdua[$i]);
-	}
-	return $pembagi;
-}
+$min_harga_filter = null;
+$max_harga_filter = null;
 
-//Normalisasi
-function Transpose($squareArray) {
-
-    if ($squareArray == null) { return null; }
-    $rotatedArray = array();
-    $r = 0;
-
-    foreach($squareArray as $row) {
-        $c = 0;
-        if (is_array($row)) {
-            foreach($row as $cell) { 
-                $rotatedArray[$c][$r] = $cell;
-                ++$c;
-            }
-        }
-        else $rotatedArray[$c][$r] = $row;
-        ++$r;
+if (isset($_POST['action'])) {
+    $preset = $_POST['preset'];
+    // Ambil preset dari database (using PDO, as you've already implemented)
+    $stmt = $db->prepare("SELECT * FROM preset WHERE nama = :nama LIMIT 1");
+    $stmt->execute([':nama' => $preset]);
+    $preset_data = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($preset_data) {
+        $W1 = $preset_data['w1'];
+        $W2 = $preset_data['w2'];
+        $W3 = $preset_data['w3'];
+        $W4 = $preset_data['w4'];
+        $W5 = $preset_data['w5'];
+        $W6 = $preset_data['w6'];
+    } else {
+        // fallback default jika preset tidak ditemukan
+        $W1 = 3; $W2 = 3; $W3 = 3; $W4 = 3; $W5 = 3; $W6 = 3;
     }
-    return $rotatedArray;
+} elseif (isset($_POST['preset_manual'])) { // Jika form manual yang disubmit
+    $W1 = $_POST['harga_manual'];
+    $W2 = $_POST['processor_manual'];
+    $W3 = $_POST['ram_manual'];
+    $W4 = $_POST['vga_manual'];
+    $W5 = $_POST['memori_manual'];
+    $W6 = $_POST['lcd_manual'];
+
+    // --- NEW LOGIC FOR MANUAL PRICE FILTER ---
+    $harga_manual_rating = (int)$_POST['harga_manual'];
+
+    // Define price ranges based on the rating (adjust these values as needed for your data)
+    switch ($harga_manual_rating) {
+        case 1: // Sangat Rendah
+            $min_harga_filter = 0;
+            $max_harga_filter = 5000000;
+            break;
+        case 2: // Rendah
+            $min_harga_filter = 5000001;
+            $max_harga_filter = 10000000;
+            break;
+        case 3: // Sedang
+            $min_harga_filter = 10000001;
+            $max_harga_filter = 15000000;
+            break;
+        case 4: // Tinggi
+            $min_harga_filter = 15000001;
+            $max_harga_filter = 20000000;
+            break;
+        case 5: // Sangat Tinggi
+            $min_harga_filter = 20000001;
+            $max_harga_filter = 999999999; // A very high number to represent "above"
+            break;
+        default:
+            // No price filter if rating is invalid or not set
+            $min_harga_filter = null;
+            $max_harga_filter = null;
+            break;
+    }
+    // --- END NEW LOGIC ---
+
+} else {
+    header('Location: rekomendasi.php');
+    exit;
 }
 
-function JarakIplus($aplus,$bob){
-	for ($i=0;$i<sizeof($bob);$i++) {
-		$dplus[$i] = 0;
-		for($j=0;$j<sizeof($aplus);$j++){
-			$dplus[$i] = $dplus[$i] + pow(($aplus[$j] - $bob[$i][$j]),2);
-		}
-		$dplus[$i] = round(sqrt($dplus[$i]),4);
-	}
-	return $dplus;
-}
+// Normalisasi bobot yang sudah didapatkan dari preset/manual
+$total_bobot = $W1 + $W2 + $W3 + $W4 + $W5 + $W6;
 
+// Avoid division by zero if total_bobot is 0
+if ($total_bobot == 0) {
+    // Handle this error or set normalized weights to default/zero
+    $W1_norm = $W2_norm = $W3_norm = $W4_norm = $W5_norm = $W6_norm = 0;
+} else {
+    $W1_norm = $W1 / $total_bobot;
+    $W2_norm = $W2 / $total_bobot;
+    $W3_norm = $W3 / $total_bobot;
+    $W4_norm = $W4 / $total_bobot;
+    $W5_norm = $W5 / $total_bobot;
+    $W6_norm = $W6 / $total_bobot;
+}
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-	
-	<title>Sistem Pendukung Keputusan Pemilihan Smartphone</title>
-	<!--Import Google Icon Font-->
-	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-	<!--Import materialize.css-->
-	<link type="text/css" rel="stylesheet" href="assets/css/materialize.css"  media="screen,projection"/>
-	<link rel="stylesheet" href="assets/css/table.css">
-	<link rel="stylesheet" href="assets/css/style.css">
-
-	<link rel="apple-touch-icon" sizes="76x76" href="assets/image/apple-icon.png"> 	<link rel="icon" type="image/png" sizes="96x96" href="assets/image/favicon.png">
-
-	<!--Let browser know website is optimized for mobile-->
-	<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-	<!--Import jQuery before materialize.js-->
-	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-	<script type="text/javascript" src="assets/js/materialize.js"></script>
-	
-	<!-- Font Awesome -->
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.5.0/css/font-awesome.min.css">
-</head>
+<?php
+include ('header.php');
+?>
 
 <body>
-	<div class="navbar-fixed">
-		<nav>
-			<div class="container">
+    <div class="navbar-fixed">
+        <nav>
+            <div class="container">
+                <div class="nav-wrapper">
+                    <ul class="left" style="margin-left: -52px;">
+                        <li><a href="index.php">HOME</a></li>
+                        <li><a href="daftar_laptop.php">DAFTAR LAPTOP</a></li>
+                        <li><a href="login.php">LOGIN</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </div>
+    <div style="background-color: #efefef">
+        <div class="container">
+            <div class="section-card" style="padding: 20px 0px">
+                <center>
+                    <h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">
+                        HASIL REKOMENDASI LAPTOP <?php echo isset($preset) ? strtoupper($preset) : 'MANUAL'; ?></h4>                </center>
+                <ul>
+                    <li>
+                        <div class="row">
+                            <div class="card">
+                                <div class="card-content">
+                                    <h5 style="margin-bottom: 16px; margin-top: -6px;">Matrik Laptop</h5>
+                                    <table class="responsive-table">
 
-				<div class="nav-wrapper">
-					<ul class="left" style="margin-left: -52px;">
-						<li><a href="index.php">HOME</a></li>
-						<li><a href="rekomendasi.php">REKOMENDASI</a></li>
-						<li><a href="daftar_hp.php">DAFTAR SMARTPHONE</a></li>
-						<li><a class="active" href="hasil.php">PERHITUNGAN</a></li>
-						<li><a href="#about">TENTANG</a></li>
-					</ul>
-				</div>
+                                        <thead style="border-top: 1px solid #d0d0d0;">
+                                            <tr>
+                                                <th>
+                                                    <center>Alternatif</center>
+                                                </th>
+                                                <th>
+                                                    <center>C1 (Harga - Cost)</center>
+                                                </th>
+                                                <th>
+                                                    <center>C2 (Processor - Benefit)</center>
+                                                </th>
+                                                <th>
+                                                    <center>C3 (RAM - Benefit)</center>
+                                                </th>
+                                                <th>
+                                                    <center>C4 (VGA - Benefit)</center>
+                                                </th>
+                                                <th>
+                                                    <center>C5 (Memory - Benefit)</center>
+                                                </th>
+                                                <th>
+                                                    <center>C6 (LCD - Benefit)</center>
+                                                </th>
+                                            </tr>
+                                        </thead>
+<tbody>
+                                            <?php
+                                            // Modified query to include price range filter if applicable
+                                            $sql_laptop_query = "SELECT * FROM data_laptop";
+                                            $params = [];
+                                            if ($min_harga_filter !== null && $max_harga_filter !== null) {
+                                                // Assuming 'harga_aktual' is the column for actual price
+                                                $sql_laptop_query .= " WHERE harga_angka BETWEEN ? AND ?";
+                                                $params = [$min_harga_filter, $max_harga_filter];
+                                            }
+                                            $sql_laptop_query .= " ORDER BY id_laptop ASC"; // Ensure consistent order for $nilaiV indexing
 
-			</div>
-		</nav>
-	</div>
-	<!-- Body Start -->
+                                            // Using PDO for consistency and prepared statements
+                                            $stmt_laptop = $db->prepare($sql_laptop_query);
+                                            $stmt_laptop->execute($params);
+                                            $query_result = $stmt_laptop->fetchAll(PDO::FETCH_ASSOC);
 
-	<!-- Daftar Laptop Start -->
-	<div style="background-color: #efefef">
-		<div class="container">
-			<div class="section-card" style="padding: 20px 0px">
-				<!--   Icon Section   -->
+                                            $no = 1;
+                                            $Matrik = array();
+                                            foreach ($query_result as $data_laptop) {
+                                                $Matrik[$no-1]=array(
+                                                    $data_laptop['harga_angka'],
+                                                    $data_laptop['processor_angka'],
+                                                    $data_laptop['ram_angka'],
+                                                    $data_laptop['vga_angka'],
+                                                    $data_laptop['memori_angka'],
+                                                    $data_laptop['lcd_angka']
+                                                );
+                                                ?>
+                                            <tr>
+                                                <td>
+                                                    <center><?php echo "A".$no ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop['harga_angka'] ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop['processor_angka'] ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop['ram_angka'] ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop['vga_angka'] ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop['memori_angka'] ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop['lcd_angka'] ?></center>
+                                                </td>
+                                            </tr>
+                                            <?php
+                                                $no++;
+                                            }
+                                            ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+                <center>
+                    <h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">
+                        BOBOT TERNORMALISASI (W)</h4>
+                </center>
+                <ul>
+                    <li>
+                        <div class="row">
+                            <div class="card">
+                                <div class="card-content">
+                                    <h5 style="margin-bottom: 16px; margin-top: -6px;">BOBOT TERNORMALISASI (W)</h5>
+                                    <table class="responsive-table">
+                                        <thead>
+                                            <tr>
+                                                <th>
+                                                    <center>W1 (Harga)</center>
+                                                </th>
+                                                <th>
+                                                    <center>W2 (Processor)</center>
+                                                </th>
+                                                <th>
+                                                    <center>W3 (RAM)</center>
+                                                </th>
+                                                <th>
+                                                    <center>W4 (VGA)</center>
+                                                </th>
+                                                <th>
+                                                    <center>W5 (Memori)</center>
+                                                </th>
+                                                <th>
+                                                    <center>W6 (LCD)</center>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>
+                                                    <center><?php echo round($W1_norm, 4);?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($W2_norm, 4);?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($W3_norm, 4);?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($W4_norm, 4);?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($W5_norm, 4);?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($W6_norm, 4);?></center>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
 
 
-				<center>
-					<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">HASIL REKOMENDASI SMARTPHONE</h4>
-				</center>
-				<ul>
-					<li>
-						<div class="row">
-							<div class="card">
-								<div class="card-content">
-									<h5 style="margin-bottom: 16px; margin-top: -6px;">Matrik Smartphone</h5>
-									<table class="responsive-table">
+                <center>
+                    <h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">
+                        Nilai Preferensi S:</h4>
+                </center>
+                <ul>
+                    <li>
+                        <div class="row">
+                            <div class="card">
+                                <div class="card-content">
+                                    <h5 style="margin-bottom: 16px; margin-top: -6px;">Nilai Preferensi "S" (Weighted
+                                        Product)</h5>
+                                    <table class="responsive-table">
 
-										<thead style="border-top: 1px solid #d0d0d0;">
-											<tr>
-												<th><center>Alternatif</center></th>
-												<th><center>C1 (Cost)</center></th>
-												<th><center>C2 (Benefit)</center></th>
-												<th><center>C3 (Benefit)</center></th>
-												<th><center>C4 (Benefit)</center></th>
-												<th><center>C5 (Benefit)</center></th>
-											</tr>
-										</thead>
-										<tbody>
-											<?php
-											$query=mysqli_query($selectdb,"SELECT * FROM data_hp");
-											$no=1;
-											while ($data_hp=mysqli_fetch_array($query)) {
-												$Matrik[$no-1]=array($data_hp['harga_angka'],$data_hp['ram_angka'],$data_hp['memori_angka'],$data_hp['processor_angka'],$data_hp['kamera_angka'] );
-												?>
-												<tr>
-													<td><center><?php echo "A",$no ?></center></td>
-													<td><center><?php echo $data_hp['harga_angka'] ?></center></td>
-													<td><center><?php echo $data_hp['ram_angka'] ?></center></td>
-													<td><center><?php echo $data_hp['memori_angka'] ?></center></td>
-													<td><center><?php echo $data_hp['processor_angka'] ?></center></td>
-													<td><center><?php echo $data_hp['kamera_angka'] ?></center></td>
-												</tr>
-												<?php
-												$no++;
-											}
-											?>
-										</tbody>
-									</table>
-								</div>
-							</div>
-						</div>
-					</li>
-				</ul>
+                                        <thead style="border-top: 1px solid #d0d0d0;">
+                                            <tr>
+                                                <th>
+                                                    <center>Alternatif</center>
+                                                </th>
+                                                <th>
+                                                    <center>Nilai S</center>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php
+												$query=mysqli_query($selectdb,"SELECT * FROM data_laptop");
+												$no=1;
+												$nilaiS = array();
+												$total_S = 0;
 
+												while ($data_laptop=mysqli_fetch_array($query)) {
+													// Bilai Cost di Invers kan
+													$pangkat_W1 = -$W1_norm; // Untuk Cost
+													$pangkat_W2 = $W2_norm;   // Untuk Benefit (Processor)
+													$pangkat_W3 = $W3_norm;   // Untuk Benefit (RAM)
+													$pangkat_W4 = $W4_norm;   // Untuk Benefit (VGA)
+													$pangkat_W5 = $W5_norm;   // Untuk Benefit (Memori)
+													$pangkat_W6 = $W6_norm;   // Untuk Benefit (LCD)
 
-				<center>
-					<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">Matriks ternormalisasi, R:</h4>
-				</center>
-				<ul>
-					<li>
-						<div class="row">
-							<div class="card">
-								<div class="card-content">
-									<h5 style="margin-bottom: 16px; margin-top: -6px;">Matriks Normalisasi "R"</h5>
-									<table class="responsive-table">
+													// Menghitung nilai S untuk setiap alternatif
+													$harga_val = ($data_laptop['harga_angka'] != 0) ? $data_laptop['harga_angka'] : 0.000001; // Hindari 0
 
-										<thead style="border-top: 1px solid #d0d0d0;">
-											<tr>
-												<th><center>Alternatif</center></th>
-												<th><center>C1 (Cost)</center></th>
-												<th><center>C2 (Benefit)</center></th>
-												<th><center>C3 (Benefit)</center></th>
-												<th><center>C4 (Benefit)</center></th>
-												<th><center>C5 (Benefit)</center></th>
-											</tr>
-										</thead>
-										<tbody>
-											<?php
-											$query=mysqli_query($selectdb,"SELECT * FROM data_hp");
-											$no=1;
-											$pembagiNM=pembagiNM($Matrik);
-											while ($data_hp=mysqli_fetch_array($query)) {
+													$S_alternatif = pow($harga_val, $pangkat_W1) *
+																	pow($data_laptop['processor_angka'], $pangkat_W2) *
+																	pow($data_laptop['ram_angka'], $pangkat_W3) *
+																	pow($data_laptop['vga_angka'], $pangkat_W4) *
+																	pow($data_laptop['memori_angka'], $pangkat_W5) *
+																	pow($data_laptop['lcd_angka'], $pangkat_W6);
 
-												$MatrikNormalisasi[$no-1]=array($data_hp['harga_angka']/$pembagiNM[0],
-													$data_hp['ram_angka']/$pembagiNM[1],
-													$data_hp['memori_angka']/$pembagiNM[2],
-													$data_hp['processor_angka']/$pembagiNM[3],
-													$data_hp['kamera_angka']/$pembagiNM[4]);
+													$nilaiS[$no-1] = round($S_alternatif, 6);
+													$total_S += $S_alternatif;
 
 													?>
-													<tr>
-														<td><center><?php echo "A",$no ?></center></td>
-														<td><center><?php echo round($data_hp['harga_angka']/$pembagiNM[0],6)?></center></td>
-														<td><center><?php echo round($data_hp['ram_angka']/$pembagiNM[1],6) ?></center></td>
-														<td><center><?php echo round($data_hp['memori_angka']/$pembagiNM[2],6) ?></center></td>
-														<td><center><?php echo round($data_hp['processor_angka']/$pembagiNM[3],6) ?></center></td>
-														<td><center><?php echo round($data_hp['kamera_angka']/$pembagiNM[4],6) ?></center></td>
-													</tr>
-													<?php
+                                            <tr>
+                                                <td>
+                                                    <center><?php echo "A",$no ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $nilaiS[$no-1] ?></center>
+                                                </td>
+                                            </tr>
+                                            <?php
 													$no++;
 												}
 												?>
-											</tbody>
-										</table>
-									</div>
-								</div>
-							</div>
-						</li>
-					</ul>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
 
 
-					<center>
-						<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">BOBOT (W)</h4>
-					</center>
-					<ul> 
-						<li>
-							<div class="row">
-								<div class="card">
-									<div class="card-content">
-									<h5 style="margin-bottom: 16px; margin-top: -6px;">BOBOT (W)</h5>
-										<table class="responsive-table">
-											<thead>
-												<tr>
-													<th><center>Value Kriteria Harga</center></th>
-													<th><center>Value Kriteria Ram</center></th>
-													<th><center>Value Kriteria Memori</center></th>
-													<th><center>Value Kriteria Processor</center></th>
-													<th><center>Value Kriteria Kamera</center></th>
-												</tr>
-											</thead>
-											<tbody>
-												<!--count($W)-->
-												<tr>
-													<td><center><?php echo($W1);?></center></td>
-													<td><center><?php echo($W2);?></center></td>
-													<td><center><?php echo($W3);?></center></td>
-													<td><center><?php echo($W4);?></center></td>
-													<td><center><?php echo($W5);?></center></td>
-												</tr>
-											</tbody>
-										</table>
-									</div>
-								</div>
-							</div>
-						</li>
-					</ul>
+                <center>
+                    <h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">
+                        Nilai Preferensi Akhir (V)
+                    </h4>
+                </center>
+                <ul>
+                    <li>
+                        <div class="row">
+                            <div class="card" style="margin-left: 320px;margin-right: 320px;">
+                                <div class="card-content">
+                                    <table class="responsive-table">
 
-
-					<center>
-						<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">Matriks ternormalisasi terbobot, Y:</h4>
-					</center>
-					<ul>
-						<li>
-							<div class="row">
-								<div class="card">
-									<div class="card-content">
-										<h5 style="margin-bottom: 16px; margin-top: -6px;">Matriks Normalisasi terBobot "Y"</h5>
-										<table class="responsive-table">
-
-											<thead style="border-top: 1px solid #d0d0d0;">
-												<tr>
-													<th><center>Alternatif</center></th>
-													<th><center>C1 (Cost)</center></th>
-													<th><center>C2 (Benefit)</center></th>
-													<th><center>C3 (Benefit)</center></th>
-													<th><center>C4 (Benefit)</center></th>
-													<th><center>C5 (Benefit)</center></th>
-												</tr>
-											</thead>
-											<tbody>
-												<?php
-												$query=mysqli_query($selectdb,"SELECT * FROM data_hp");
-												$no=1;
-												$pembagiNM=pembagiNM($Matrik);
-												while ($data_hp=mysqli_fetch_array($query)) {
-													
-													$NormalisasiBobot[$no-1]=array(
-														$MatrikNormalisasi[$no-1][0]*$W1,
-														$MatrikNormalisasi[$no-1][1]*$W2,
-														$MatrikNormalisasi[$no-1][2]*$W3,
-														$MatrikNormalisasi[$no-1][3]*$W4,
-														$MatrikNormalisasi[$no-1][4]*$W5 );
-
-														?>
-														<tr>
-															<td><center><?php echo "A",$no ?></center></td>
-															<td><center><?php echo round($MatrikNormalisasi[$no-1][0]*$W1,6) ?></center></td>
-															<td><center><?php echo round($MatrikNormalisasi[$no-1][1]*$W2,6) ?></center></td>
-															<td><center><?php echo round($MatrikNormalisasi[$no-1][2]*$W3,6) ?></center></td>
-															<td><center><?php echo round($MatrikNormalisasi[$no-1][3]*$W4,6) ?></center></td>
-															<td><center><?php echo round($MatrikNormalisasi[$no-1][4]*$W5,6) ?></center></td>
-														</tr>
-														<?php
-														$no++;
-													}
-													?>
-												</tbody>
-											</table>
-										</div>
-									</div>
-								</div>
-							</li>
-						</ul>
-
-
-						<center>
-							<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">Matrik Solusi ideal positif dan negatif
-							</h4>
-						</center>
-						<ul>
-							<li>
-								<div class="row">
-									<div class="card">
-										<div class="card-content">
-											<h5 style="margin-bottom: 16px; margin-top: -6px;">Matrik Solusi ideal positif "A+" dan negatif "A-"
-											</h5>
-											<table class="responsive-table">
-
-												<thead style="border-top: 1px solid #d0d0d0;">
-													<tr>
-														<th><center></center></th>
-														<th><center>Y1 (Cost)</center></th>
-														<th><center>Y2 (Benefit)</center></th>
-														<th><center>Y3 (Benefit)</center></th>
-														<th><center>Y4 (Benefit)</center></th>
-														<th><center>Y5 (Benefit)</center></th>
-													</tr>
-												</thead>
-												<tbody>
-													<?php
-													$NormalisasiBobotTrans = Transpose($NormalisasiBobot);
-													?>
-													<tr>
-														<?php  
-														$idealpositif=array(min($NormalisasiBobotTrans[0]),max($NormalisasiBobotTrans[1]),max($NormalisasiBobotTrans[2]),max($NormalisasiBobotTrans[3]),max($NormalisasiBobotTrans[4]));
-														?>
-														<td><center><?php echo "Y+" ?> </center></td>
-														<td><center><?php echo(round(min($NormalisasiBobotTrans[0]),6));?>&nbsp(min)</center></td>
-														<td><center><?php echo(round(max($NormalisasiBobotTrans[1]),6));?>&nbsp(max)</center></td>
-														<td><center><?php echo(round(max($NormalisasiBobotTrans[2]),6));?>&nbsp(max)</center></td>
-														<td><center><?php echo(round(max($NormalisasiBobotTrans[3]),6));?>&nbsp(max)</center></td>
-														<td><center><?php echo(round(max($NormalisasiBobotTrans[4]),6));?>&nbsp(max)</center></td>
-													</tr>
-													<tr>
-														<?php  
-														$idealnegatif=array(max($NormalisasiBobotTrans[0]),min($NormalisasiBobotTrans[1]),min($NormalisasiBobotTrans[2]),min($NormalisasiBobotTrans[3]),min($NormalisasiBobotTrans[4]));
-														?>
-														<td><center><?php echo "Y-" ?> </center></td>
-														<td><center><?php echo(round(max($NormalisasiBobotTrans[0]),6));?>&nbsp(max)</center></td>
-														<td><center><?php echo(round(min($NormalisasiBobotTrans[1]),6));?>&nbsp(min)</center></td>
-														<td><center><?php echo(round(min($NormalisasiBobotTrans[2]),6));?>&nbsp(min)</center></td>
-														<td><center><?php echo(round(min($NormalisasiBobotTrans[3]),6));?>&nbsp(min)</center></td>
-														<td><center><?php echo(round(min($NormalisasiBobotTrans[4]),6));?>&nbsp(min)</center></td>
-													</tr>
-												</tbody>
-											</table>
-										</div>
-									</div>
-								</div>
-							</li>
-						</ul>
-
-
-						<center>
-							<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">Jarak antara nilai terbobot setiap alternatif terhadap solusi ideal positif												
-							</h4>
-						</center>
-						<ul>
-							<li>
-								<div class="row">
-									<div class="card" style="margin-left: 320px;margin-right: 320px;">
-										<div class="card-content">
-											<table class="responsive-table" >
-
-												<thead style="border-top: 1px solid #d0d0d0;">
-													<tr>
-														<th><center>D+</center></th>
-														<th><center></center></th>
-														<th><center>D-</center></th>
-														<th><center></center></th>
-													</tr>
-												</thead>
-												<tbody>
-													<?php
-													$query=mysqli_query($selectdb,"SELECT * FROM data_hp");
-													$no=1;
-													$Dplus=JarakIplus($idealpositif,$NormalisasiBobot);
-													$Dmin=JarakIplus($idealnegatif,$NormalisasiBobot);
-													while ($data_hp=mysqli_fetch_array($query)) {
-
-														?>
-														<tr>
-															<td><center><?php echo "D",$no ?></center></td>
-															<td><center><?php echo round($Dplus[$no-1],6) ?></center></td>
-															<td><center><?php echo "D",$no ?></center></td>
-															<td><center><?php echo round($Dmin[$no-1],6) ?></center></td>
-														</tr>
-														<?php
-														$no++;
-													}
-													?>
-												</tbody>
-											</table>
-
-										</div>
-									</div>
-								</div>
-							</li>
-						</ul>
-
-
-						<center>
-							<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">Nilai Preferensi untuk Setiap alternatif (V)												
-							</h4>
-						</center>
-						<ul>
-							<li>
-								<div class="row">
-									<div class="card" style="margin-left: 320px;margin-right: 320px;">
-										<div class="card-content">
-											<table class="responsive-table" >
-
-												<thead style="border-top: 1px solid #d0d0d0;">
-													<tr>
-														<th><center>Nilai Preferensi "V"</center></th>
-														<th><center>Nilai</center></th>
-													</tr>
-												</thead>
-												<tbody>
-													<?php
-													$query=mysqli_query($selectdb,"SELECT * FROM data_hp");
+                                        <thead style="border-top: 1px solid #d0d0d0;">
+                                            <tr>
+                                                <th>
+                                                    <center>Nilai Preferensi "V"</center>
+                                                </th>
+                                                <th>
+                                                    <center>Nilai</center>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php
+													$query=mysqli_query($selectdb,"SELECT * FROM data_laptop"); // Query ulang untuk display
 													$no=1;
 													$nilaiV = array();
-													while ($data_hp=mysqli_fetch_array($query)) {
-														
-														array_push($nilaiV, $Dmin[$no-1]/($Dmin[$no-1]+$Dplus[$no-1]));
+													foreach ($nilaiS as $key => $s_val) {
+														$V_alternatif = ($total_S != 0) ? $s_val / $total_S : 0;
+														array_push($nilaiV, $V_alternatif);
 														?>
-														<tr>
-															<td><center><?php echo "V",$no ?></center></td>
-															<td><center><?php echo $Dmin[$no-1]/($Dmin[$no-1]+$Dplus[$no-1]); ?></center></td>
-														</tr>
-														<?php
-														$no++;
-													}
+                                            <tr>
+                                                <td>
+                                                    <center><?php echo "V",($key+1) ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($V_alternatif, 6); ?></center>
+                                                </td>
+                                            </tr>
+                                            <?php
+											$no++; }
+											?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+                <center>
+                    <h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">
+                        Rekomendasi Terbaik Tiap Merk
+                    </h4>
+                </center>
+                <ul>
+                    <li>
+                        <div class="row">
+                            <div class="card" style="margin-left: 200px;margin-right: 200px;">
+                                <div class="card-content">
+                                    <table class="responsive-table">
+                                        <thead>
+                                            <tr>
+                                                <th>
+                                                    <center>Merk</center>
+                                                </th>
+                                                <th>
+                                                    <center>Nama Laptop</center>
+                                                </th>
+                                                <th>
+                                                    <center>Nilai Preferensi V</center>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php
+                                                    $query = mysqli_query($selectdb, "SELECT * FROM data_laptop ORDER BY id_laptop ASC");
+                                                    $no = 0;
+                                                    $merk_terbaik = array(); 
 
-													?>
-												</tbody>
-											</table>
-										</div>
-									</div>
-								</div>
-							</li>
-						</ul>
+                                                    while ($data_laptop = mysqli_fetch_array($query)) {
+                                                        $merk = $data_laptop['merk'];
+                                                        $nilai_v = $nilaiV[$no];
 
+                                                        // Jika merk belum ada, atau nilai V lebih besar, simpan
+                                                        if (!isset($merk_terbaik[$merk]) || $nilai_v > $merk_terbaik[$merk]['V']) {
+                                                            $merk_terbaik[$merk] = [
+                                                                'V' => $nilai_v,
+                                                                'data' => $data_laptop
+                                                            ];
+                                                        }
+                                                        $no++;
+                                                    }
+                                                        ?> <?php foreach ($merk_terbaik as $merk => $info) { ?>
+                                            <tr>
+                                                <td>
+                                                    <center><?php echo htmlspecialchars($merk); ?></center>
+                                                </td>
+                                                <td>
+                                                    <center>
+                                                        <?php echo htmlspecialchars($info['data']['nama_laptop']); ?>
+                                                    </center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($info['V'], 6); ?></center>
+                                                </td>
+                                            </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
 
-						<center>
-							<h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">Nilai Preferensi tertinggi
-							</h4>
-						</center>
-						<ul>
-							<li>
-								<div class="row">
-									<div class="card" style="margin-left: 300px;margin-right: 300px;">
-										<div class="card-content">
-											<table class="responsive-table" >
+                <center>
+                    <h4 class="header" style="margin-left: 24px; margin-bottom: 0px; margin-top: 24px; color: #635c73;">
+                        Nilai Preferensi tertinggi
+                    </h4>
+                </center>
+                <ul>
+                    <li>
+                        <div class="row">
+                            <div class="card" style="margin-left: 300px;margin-right: 300px;">
+                                <div class="card-content">
+                                    <table class="responsive-table">
 
-												<thead style="border-top: 1px solid #d0d0d0;">
-													<tr>
-														<th><center>Nilai Preferensi tertinggi</center></th>
-														<th></th>
-														<th><center>Alternatif HP terpilih</center></th>
-													</tr>
-												</thead>
-												<tbody>
-													<tr>
-														<?php
-														$testmax = max($nilaiV);
-														for ($i=0; $i < count($nilaiV); $i++) { 
+                                        <thead style="border-top: 1px solid #d0d0d0;">
+                                            <tr>
+                                                <th>
+                                                    <center>Nilai Preferensi tertinggi</center>
+                                                </th>
+                                                <th>
+                                                    <center>Nilai V</center>    
+                                                <th>
+                                                    <center>Rekomendasi Laptop terpilih</center>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <?php
+														$testmax = -INF; 
+														if (!empty($nilaiV)) {
+														    $testmax = max($nilaiV);
+														}
+
+														$index_terpilih = -1;
+														for ($i=0; $i < count($nilaiV); $i++) {
 															if ($nilaiV[$i] == $testmax) {
-																$query=mysqli_query($selectdb,"SELECT * FROM data_hp where id_hp = $i+1");
-																?>
-																<td><center><?php echo "V".($i+1); ?></center></td>
-																<td><center><?php echo $nilaiV[$i]; ?></center></td>
-																<?php while ($user=mysqli_fetch_array($query)) { ?>
-																<td><center><?php echo $user['nama_hp']; ?></center></td>
-																<?php
+																$index_terpilih = $i;
+																break; 
 															}
 														}
-													} ?>
-												</tr>
-											</tbody>
-										</table>
-									</div>
-								</div>
-							</div>
-						</li>
-					</ul>
-					<div class="row center" \>
-						<a href="rekomendasi.php" id="download-button" class="waves-effect waves-light btn" style="margin-top: 0px">Hitung Rekomendasi Ulang</a>
-					</div>
-				</div>
-			</div>
-		</div>
-		<!-- Daftar Laptop End -->
-		<!-- Modal Start -->
-		<div id="about" class="modal">
-			<div class="modal-content">
-				<h4>Tentang</h4>
-				<p>Sistem Pendukung Keputusan Pemilihan Smartphone ini menggunakan metode TOPSIS yang dibangun menggunakan bahasa PHP.
-					Sistem ini dibuat sebagai Tugas Akhir Mata Kuliah Sistem Pendukung Keputusan Prodi Teknik Informatika Universitas Trunojoyo Madura. <br>
-					<br>
-					1. Zulfi Osman<br>
-					2. Wahid Arinanto Nugroho <a href="https://wahidari.gitlab.io/"> (Gitlab)</a><br>
-				</p>
-			</div>
-			<div class="modal-footer">
-				<a href="#!" class="modal-action modal-close waves-effect waves-green btn-flat">Tutup</a>
-			</div>
-		</div>
-		<!-- Modal End -->
 
-		<!-- Body End -->
+														if ($index_terpilih != -1) {
+															$query=mysqli_query($selectdb,"SELECT * FROM data_laptop where id_laptop = ".($index_terpilih+1));
+															$data_laptop_terpilih = mysqli_fetch_array($query);
+														?>
+                                                <td>
+                                                    <center><?php echo "V".($index_terpilih+1); ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo round($nilaiV[$index_terpilih], 6); ?></center>
+                                                </td>
+                                                <td>
+                                                    <center><?php echo $data_laptop_terpilih['nama_laptop']; ?></center>
+                                                </td>
+                                                <?php
+														} else {
+															echo "<td colspan='3'><center>Tidak ada rekomendasi</center></td>";
+														}
+														?>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+                <div class="row center" \>
+                    <a href="rekomendasi.php" id="download-button" class="waves-effect waves-light btn"
+                        style="margin-top: 0px">Hitung Rekomendasi Ulang</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
 
-		<!-- Footer Start -->
-		<div class="footer-copyright" style="padding: 0px 0px; background-color: white">
-			<div class="container">
-				<p align="center" style="color: #999">&copy; Sistem Pendukung Keputusan Pemilihan Smartphone 2018.</p>
-			</div>
-		</div>
-		<!-- Footer End -->
-		<script type="text/javascript">
-			$(document).ready(function(){
-				$('.parallax').parallax();
-				$('.modal').modal();
-			});
-		</script>
-	</body>
-	</html>
+<?php include 'footer.php'; ?>

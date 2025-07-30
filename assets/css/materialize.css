@@ -4328,8 +4328,8 @@ nav ul li a.active {
 nav ul a {
   transition: background-color .3s;
   font-size: 1rem;
-  color: #fff;
-  display: block;
+  color: #006064;
+  display: block; 
   padding: 0 15px;
   cursor: pointer;
 }
@@ -5115,11 +5115,11 @@ small {
 .btn, .btn-large,
 .btn-flat {
   border: none;
-  border-radius: 2px;
+  border-radius: 10px;
   display: inline-block;
   height: 36px;
   line-height: 36px;
-  padding: 0 2rem;
+  padding: 0 0.5rem;
   text-transform: uppercase;
   vertical-align: middle;
   -webkit-tap-highlight-color: transparent;
@@ -8977,4 +8977,14 @@ button.picker__today:focus, button.picker__clear:focus, button.picker__close:foc
 
 .dataTablesCustom label {
     font-size: 1rem;
+}
+/* Kurangi margin bawah antar select di form manual */
+.select-row {
+    margin-bottom: 4px !important;
+}
+.select-row > label {
+    margin-bottom: 0 !important;
+}
+.select-row > select {
+    margin-bottom: 0 !important;
 }
